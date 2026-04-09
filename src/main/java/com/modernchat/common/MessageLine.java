@@ -15,5 +15,6 @@ public class MessageLine
     long timestamp;
     String senderName;
     String receiverName;
+    String targetName;
     String prefix;
 }

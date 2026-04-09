@@ -410,7 +410,13 @@ public class MessageContainer extends Overlay
                 c = config.getFriendColor();
                 break;
             case CLAN_CHAT:
+            case CLAN_MESSAGE:
+            case CLAN_GIM_CHAT:
+            case CLAN_GIM_FORM_GROUP:
+            case CLAN_GIM_MESSAGE:
+            case CLAN_GIM_GROUP_WITH:
             case CLAN_GUEST_CHAT:
+            case CLAN_GUEST_MESSAGE:
                 c = config.getClanColor();
                 break;
             case PRIVATECHATOUT:
@@ -431,9 +437,7 @@ public class MessageContainer extends Overlay
         ChatMessageType type = line.getType();
         String senderName = line.getSenderName();
         String receiverName = line.getReceiverName();
-        String targetName = type == ChatMessageType.PRIVATECHATOUT || type == ChatMessageType.FRIENDNOTIFICATION
-            ? receiverName
-            : senderName;
+        String targetName = line.getTargetName();
 
         pushLine(line.getText(),
             type,

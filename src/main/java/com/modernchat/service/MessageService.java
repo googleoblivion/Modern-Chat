@@ -129,12 +129,13 @@ public class MessageService implements ChatService
     }
 
     public void sendPrivateChat(String text, String targetName) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
         if (StringUtil.isNullOrEmpty(text)) {
             log.warn("Attempted to send empty private chat message");
             return;
         }
 
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to send private chat without a target name");
             return;
         }
@@ -151,10 +152,10 @@ public class MessageService implements ChatService
         lastSendTimestamp = System.currentTimeMillis();
 
         clientThread.invoke(() -> {
-            client.runScript(ScriptID.PRIVMSG, targetName, text);
+            client.runScript(ScriptID.PRIVMSG, sanitizedTargetName, text);
 
             eventBus.post(new SubmitHistoryEvent(text));
-            eventBus.post(new ChatPrivateMessageSentEvent(text, targetName));
+            eventBus.post(new ChatPrivateMessageSentEvent(text, sanitizedTargetName));
         });
     }
 

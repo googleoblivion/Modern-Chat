@@ -377,7 +377,26 @@ public class ChatOverlay extends OverlayPanel
         if (vp == null || vp.width <= 0 || vp.height <= 0)
             return null;
 
-        return new Rectangle(vp);
+        vp = new Rectangle(vp);
+
+        Widget splitPmParent = widgetBucket.getSplitPmParentIfVisible();
+        if (splitPmParent != null) {
+            Rectangle splitPmBounds = splitPmParent.getBounds();
+            if (splitPmBounds != null && splitPmBounds.width > 0 && splitPmBounds.height > 0) {
+                Rectangle overlap = vp.intersection(splitPmBounds);
+                if (!overlap.isEmpty() && overlap.y <= vp.y + 2) {
+                    int inset = Math.min(vp.height, overlap.height);
+                    vp.y += inset;
+                    vp.height -= inset;
+                }
+            }
+        }
+
+        if (vp.width <= 0 || vp.height <= 0) {
+            return null;
+        }
+
+        return vp;
     }
 
     private Font getFont() {
@@ -744,24 +763,26 @@ public class ChatOverlay extends OverlayPanel
     }
 
     private @Nullable String selectPrivateContainer(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        String displayTargetName = StringUtil.sanitizeDisplayName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to select private container with null or empty target name");
             return null;
         }
 
-        if (targetName.startsWith("private_")) {
+        if (sanitizedTargetName.startsWith("private_")) {
             log.warn("Attempted to select private container with contained name starting with 'private_'");
         }
 
-        String tabKey = "private_" + targetName;
+        String tabKey = privateTabKey(sanitizedTargetName);
         // Create a new tab for this private chat
         if (!tabsByKey.containsKey(tabKey)) {
-            Tab tab = createPrivateTab(tabKey, targetName);
+            Tab tab = createPrivateTab(tabKey, displayTargetName, sanitizedTargetName);
             addTab(tab);
         }
 
         // Use openPrivateMessageContainer to ensure existing messages are copied
-        MessageContainer privateContainer = openPrivateMessageContainer(targetName);
+        MessageContainer privateContainer = openPrivateMessageContainer(sanitizedTargetName);
 
         if (messageContainer != null) {
             messageContainer.setHidden(true);
@@ -769,7 +790,7 @@ public class ChatOverlay extends OverlayPanel
 
         messageContainer = privateContainer;
         if (messageContainer == null) {
-            log.warn("Failed to get or create private message container for target: {}", targetName);
+            log.warn("Failed to get or create private message container for target: {}", sanitizedTargetName);
             return null;
         }
 
@@ -778,8 +799,9 @@ public class ChatOverlay extends OverlayPanel
         return tabKey;
     }
 
-    private Tab createPrivateTab(String key, String targetName) {
-        return new Tab(key, targetName, true);
+    private Tab createPrivateTab(String key, String displayTargetName, String targetName) {
+        String title = StringUtil.isNullOrEmpty(displayTargetName) ? targetName : displayTargetName;
+        return new Tab(key, title, true, targetName, false);
     }
 
     private void selectMessageContainer(ChatMode chatMode) {
@@ -871,12 +893,13 @@ public class ChatOverlay extends OverlayPanel
     }
 
     public int removePrivateTab(String targetName, boolean keepContainer) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to remove private tab with null or empty target name");
             return -1;
         }
 
-        String key = targetName.startsWith("private_") ? targetName : "private_" + targetName;
+        String key = sanitizedTargetName.startsWith("private_") ? sanitizedTargetName : privateTabKey(sanitizedTargetName);
         return removeTab(key, keepContainer);
     }
 
@@ -1416,6 +1439,7 @@ public class ChatOverlay extends OverlayPanel
             line.getTimestamp(),
             line.getSenderName(),
             line.getReceiverName(),
+            line.getTargetName(),
             line.getPrefix());
     }
 
@@ -1425,17 +1449,16 @@ public class ChatOverlay extends OverlayPanel
         long timestamp,
         String senderName,
         String receiverName,
+        String targetName,
         String prefix
     ) {
         ChatMode mode = ChatUtil.toChatMode(type);
         ChatMode selectedMode = mode;
-        String targetName = type == ChatMessageType.PRIVATECHATOUT || type == ChatMessageType.FRIENDNOTIFICATION
-            ? receiverName
-            : senderName;
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
 
         // Handle private messages
         if (mode == ChatMode.PRIVATE) {
-            if (StringUtil.isNullOrEmpty(targetName) && !line.startsWith("Unable to send message ")) {
+            if (StringUtil.isNullOrEmpty(sanitizedTargetName) && !line.startsWith("Unable to send message ")) {
                 log.warn("Attempted to add private message without a receiver name");
                 return;
             }
@@ -1443,20 +1466,20 @@ public class ChatOverlay extends OverlayPanel
             selectedMode = ChatMode.PUBLIC;
 
             // Route to private tab if exists or should be created
-            if (isPrivateTabOpen(targetName)) {
-                String tabKey = "private_" + targetName;
+            if (isPrivateTabOpen(sanitizedTargetName)) {
+                String tabKey = privateTabKey(sanitizedTargetName);
                 Tab pmTab = tabsByKey.get(tabKey);
-                MessageContainer pmContainer = privateContainers.get(targetName);
+                MessageContainer pmContainer = privateContainers.get(sanitizedTargetName);
                 if (pmContainer != null) {
-                    pmContainer.pushLine(line, type, timestamp, senderName, receiverName, targetName, prefix);
+                    pmContainer.pushLine(line, type, timestamp, senderName, receiverName, sanitizedTargetName, prefix);
                     if (pmTab != null && messageContainer != pmContainer && pmTab.getUnread() < 99) {
                         pmTab.incrementUnread();
                     }
                 }
             } else if (config.isOpenTabOnIncomingPM() && type != ChatMessageType.PRIVATECHATOUT && type != ChatMessageType.FRIENDNOTIFICATION) {
-                Pair<Tab, MessageContainer> pair = openTabForPrivateChat(targetName);
+                Pair<Tab, MessageContainer> pair = openTabForPrivateChat(senderName, sanitizedTargetName);
                 if (pair != null) {
-                    pair.getRight().pushLine(line, type, timestamp, senderName, receiverName, targetName, prefix);
+                    pair.getRight().pushLine(line, type, timestamp, senderName, receiverName, sanitizedTargetName, prefix);
                     if (messageContainer != pair.getRight() && pair.getLeft().getUnread() < 99) {
                         pair.getLeft().incrementUnread();
                     }
@@ -1468,7 +1491,7 @@ public class ChatOverlay extends OverlayPanel
         MessageContainer modeContainer = messageContainers.get(selectedMode.name());
         Tab modeTab = tabsByKey.get(tabKey(selectedMode));
         if (modeContainer != null) {
-            modeContainer.pushLine(line, type, timestamp, senderName, receiverName, targetName, prefix);
+            modeContainer.pushLine(line, type, timestamp, senderName, receiverName, sanitizedTargetName, prefix);
             if (modeTab != null && messageContainer != modeContainer && modeTab.getUnread() < 99) {
                 modeTab.incrementUnread();
             }
@@ -1476,22 +1499,24 @@ public class ChatOverlay extends OverlayPanel
     }
 
     public boolean isPrivateTabOpen(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to check private tab with null or empty target name");
             return false;
         }
 
-        String tabKey = "private_" + targetName;
+        String tabKey = privateTabKey(sanitizedTargetName);
         return tabsByKey.containsKey(tabKey);
     }
 
     public Tab selectPrivateTab(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to select private tab with null or empty target name");
             return null;
         }
 
-        Pair<Tab, MessageContainer> pair = openTabForPrivateChat(targetName);
+        Pair<Tab, MessageContainer> pair = openTabForPrivateChat(StringUtil.sanitizeDisplayName(targetName), sanitizedTargetName);
         Tab tab = pair.getLeft();
 
         selectTab(tab);
@@ -1499,15 +1524,16 @@ public class ChatOverlay extends OverlayPanel
     }
 
     private Tab getPrivateTab(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to get private tab with null or empty target name");
             return null;
         }
 
-        String tabKey = "private_" + targetName;
+        String tabKey = privateTabKey(sanitizedTargetName);
         Tab tab = tabsByKey.get(tabKey);
         if (tab == null) {
-            log.warn("No private tab found for target: {}", targetName);
+            log.warn("No private tab found for target: {}", sanitizedTargetName);
         }
         return tab;
     }
@@ -1517,15 +1543,20 @@ public class ChatOverlay extends OverlayPanel
     }
 
     public Pair<Tab, MessageContainer> openTabForPrivateChat(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        return openTabForPrivateChat(StringUtil.sanitizeDisplayName(targetName), StringUtil.sanitizePlayerName(targetName));
+    }
+
+    public Pair<Tab, MessageContainer> openTabForPrivateChat(String displayTargetName, String targetName) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to open private chat tab with null or empty target name");
             return null;
         }
 
         Tab tab;
-        String tabKey = "private_" + targetName;
+        String tabKey = privateTabKey(sanitizedTargetName);
         if (!tabsByKey.containsKey(tabKey)) {
-            tab = createPrivateTab(tabKey, targetName);
+            tab = createPrivateTab(tabKey, displayTargetName, sanitizedTargetName);
             addTab(tab);
 
             if (config.isAutoSelectPrivateTab()) {
@@ -1536,24 +1567,29 @@ public class ChatOverlay extends OverlayPanel
         }
 
         // For private messages we need to create a container if it doesn't exist
-        MessageContainer container = openPrivateMessageContainer(targetName);
+        MessageContainer container = openPrivateMessageContainer(sanitizedTargetName);
         return Pair.of(tab, container);
     }
 
     private MessageContainer openPrivateMessageContainer(String targetName) {
-        if (StringUtil.isNullOrEmpty(targetName)) {
+        String sanitizedTargetName = StringUtil.sanitizePlayerName(targetName);
+        if (StringUtil.isNullOrEmpty(sanitizedTargetName)) {
             log.warn("Attempted to open private message container with null or empty target name");
             return null;
         }
 
-        MessageContainer container = privateContainers.get(targetName);
+        MessageContainer container = privateContainers.get(sanitizedTargetName);
         if (container == null) {
             container = messageContainerProvider.get();
             container.setPrivate(true);
             container.startUp(config.getMessageContainerConfig(), ChatMode.PRIVATE);
-            privateContainers.put(targetName, container);
+            privateContainers.put(sanitizedTargetName, container);
         }
         return container;
+    }
+
+    private String privateTabKey(String targetName) {
+        return "private_" + targetName;
     }
 
     private String buildPlainRowText(RichLine rl) {

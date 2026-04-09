@@ -147,16 +147,17 @@ public class ChatUtil
 
     public static Pair<String, String> getSenderAndReceiver(ChatMessage msg, String localPlayerName) {
         String receiverName = null;
-        String senderName = msg.getSender();
-        String name = msg.getName();
+        String senderName = StringUtil.sanitizeDisplayName(msg.getSender());
+        String name = StringUtil.sanitizeDisplayName(msg.getName());
         ChatMessageType type = msg.getType();
+        String sanitizedLocalPlayerName = StringUtil.sanitizeDisplayName(localPlayerName);
 
         if (type == ChatMessageType.PRIVATECHATOUT) {
             receiverName = name;
             senderName = "You";
         }
         else if (type == ChatMessageType.PRIVATECHAT) {
-            receiverName = localPlayerName;
+            receiverName = sanitizedLocalPlayerName;
             senderName = name;
         }
         else if (ChatUtil.isClanMessage(type) || ChatUtil.isFriendsChatMessage(type)) {
@@ -167,10 +168,18 @@ public class ChatUtil
         }
 
         if (receiverName == null) {
-            receiverName = localPlayerName;
+            receiverName = sanitizedLocalPlayerName;
         }
 
         return Pair.of(senderName, receiverName);
+    }
+
+    public static String getTargetName(ChatMessageType type, String senderName, String receiverName) {
+        String rawTarget = type == ChatMessageType.PRIVATECHATOUT || type == ChatMessageType.FRIENDNOTIFICATION
+            ? receiverName
+            : senderName;
+
+        return StringUtil.sanitizePlayerName(rawTarget);
     }
 
     public static String getCustomPrefix(ChatMessage msg) {
@@ -210,7 +219,7 @@ public class ChatUtil
 
         String localPlayerName = "";
         if (localPlayer != null) {
-            localPlayerName = localPlayer.getName();
+            localPlayerName = StringUtil.sanitizeDisplayName(localPlayer.getName());
             if (StringUtil.isNullOrEmpty(localPlayerName) && requireLocalPlayer)
                 return null;
         }
@@ -225,6 +234,7 @@ public class ChatUtil
         String[] params = msg.split("\\|", 3);
         String receiverName = senderReceiver.getRight();
         String senderName = senderReceiver.getLeft();
+        String targetName = ChatUtil.getTargetName(type, senderName, receiverName);
         String prefix = ChatUtil.getCustomPrefix(e);
 
         if (type == ChatMessageType.DIALOG) {
@@ -250,7 +260,7 @@ public class ChatUtil
 
         builder.append(message, false);
 
-        return new MessageLine(builder.build(), type, timestamp, senderName, receiverName, prefix);
+        return new MessageLine(builder.build(), type, timestamp, senderName, receiverName, targetName, prefix);
     }
 
     public static String getPrefix(ChatMessageType type) {
@@ -265,7 +275,11 @@ public class ChatUtil
             case AUTOTYPER:
                 break;
             case CLAN_CHAT:
+            case CLAN_MESSAGE:
+            case CLAN_GIM_CHAT:
             case CLAN_GIM_FORM_GROUP:
+            case CLAN_GIM_MESSAGE:
+            case CLAN_GIM_GROUP_WITH:
             case CLAN_GUEST_CHAT:
             case CLAN_GUEST_MESSAGE:
                 prefix = "[Clan] ";

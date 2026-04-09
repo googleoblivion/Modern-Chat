@@ -319,10 +319,7 @@ public class ModernChatPlugin extends Plugin {
 
 	private void onPrivateMessageRightClick(String target) {
 		log.debug("Private message right-clicked: {}", target);
-		String cleanedTarget = Text.removeTags(target);
-		int index = cleanedTarget.indexOf(" (");
-		if (index != -1)
-			cleanedTarget = cleanedTarget.substring(0, index - 1);
+		String cleanedTarget = StringUtil.sanitizePlayerName(target);
 
 		privateChatService.setPmTarget(cleanedTarget);
 		privateChatService.clearChatInput();

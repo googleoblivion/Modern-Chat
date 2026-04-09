@@ -11,19 +11,25 @@ public final class Tab {
     final String key;
     final String title;
     final boolean closeable;
+    final String targetName;
     final Rectangle bounds = new Rectangle();
     Rectangle closeBounds = new Rectangle();
     int unread = 0;
     boolean hidden;
 
     public Tab(String key, String title, boolean closeable) {
-        this(key, title, closeable, false);
+        this(key, title, closeable, title, false);
     }
 
     public Tab(String key, String title, boolean closeable, boolean hidden) {
+        this(key, title, closeable, title, hidden);
+    }
+
+    public Tab(String key, String title, boolean closeable, @Nullable String targetName, boolean hidden) {
         this.key = key;
         this.title = title;
         this.closeable = closeable;
+        this.targetName = targetName;
         this.hidden = hidden;
     }
 
@@ -38,7 +44,7 @@ public final class Tab {
     }
 
     public @Nullable String getTargetName() {
-        return isPrivate() ? getTitle() : null;
+        return isPrivate() ? targetName : null;
     }
 
     @Override

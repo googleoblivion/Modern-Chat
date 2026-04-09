@@ -104,7 +104,7 @@ public class PrivateChatService implements ChatService, KeyListener {
     public void onChatMessage(ChatMessage e) {
         final ChatMessageType t = e.getType();
         if (t == ChatMessageType.PRIVATECHAT || t == ChatMessageType.MODPRIVATECHAT) {
-            lastPmFrom = Text.toJagexName(Text.removeTags(e.getName()));
+            lastPmFrom = StringUtil.sanitizePlayerName(e.getName());
             log.debug("lastPmFrom = {}", lastPmFrom);
         }
     }
@@ -153,7 +153,7 @@ public class PrivateChatService implements ChatService, KeyListener {
 
         canShowLockMessage = true;
 
-        final String currentTarget = Text.toJagexName(target);
+        final String currentTarget = StringUtil.sanitizePlayerName(target);
         final String body = pendingPrefill;
         pendingPmTarget = null;
         pendingPrefill = null;
@@ -192,7 +192,7 @@ public class PrivateChatService implements ChatService, KeyListener {
     }
 
     public void setPmTarget(String pmTarget) {
-        this.pmTarget = pmTarget;
+        this.pmTarget = StringUtil.sanitizePlayerName(pmTarget);
         canShowLockMessage = true; // Reset lock message state
     }
 
@@ -208,7 +208,8 @@ public class PrivateChatService implements ChatService, KeyListener {
     }
 
     public void replyTo(String target) {
-        if (target == null || target.isEmpty()) {
+        String sanitizedTarget = StringUtil.sanitizePlayerName(target);
+        if (StringUtil.isNullOrEmpty(sanitizedTarget)) {
             log.warn("Reply target is empty or null");
             return;
         }
@@ -216,7 +217,7 @@ public class PrivateChatService implements ChatService, KeyListener {
         // Queue for AFTER the frame to avoid "scripts are not reentrant"
         // If something is already queued, don't enqueue again this frame.
         if (pendingPmTarget == null) {
-            pendingPmTarget = target;
+            pendingPmTarget = sanitizedTarget;
             pendingPrefill = null; // currently null; kept for future use
         }
     }
