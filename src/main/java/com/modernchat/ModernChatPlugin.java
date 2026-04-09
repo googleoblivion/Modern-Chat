@@ -260,9 +260,9 @@ public class ModernChatPlugin extends Plugin {
 	}
 
 	private boolean tryAddPrivateMessageMenuOption(MenuEntry[] entries) {
-		List<MenuEntry> targetEntries = new ArrayList<>();
 		String playerTarget = null;
 		int order = 0;
+		boolean hasExistingChatWith = false;
 
 		for (int i = entries.length - 1; i >= 0; --i) {
 			MenuEntry entry = entries[i];
@@ -273,9 +273,8 @@ public class ModernChatPlugin extends Plugin {
 				playerTarget = entry.getTarget();
 			}
 
-			// try find sub-menu entry for private message first
-			if (!StringUtil.isNullOrEmpty(target) && StringUtil.isNullOrEmpty(option) && entry.getType() == MenuAction.RUNELITE) {
-				targetEntries.add(entry);
+			if (!StringUtil.isNullOrEmpty(option) && option.equalsIgnoreCase("Chat with")) {
+				hasExistingChatWith = true;
 			}
 			else if (!StringUtil.isNullOrEmpty(option) && option.equalsIgnoreCase("Message")) {
 				playerTarget = target;
@@ -283,28 +282,7 @@ public class ModernChatPlugin extends Plugin {
 			}
 		}
 
-		boolean addedToSubMenu = false;
-
-		for (MenuEntry targetEntry : targetEntries) {
-			String target = targetEntry.getTarget();
-			if (StringUtil.isNullOrEmpty(target)) {
-				continue;
-			}
-
-			Menu menu = targetEntry.getSubMenu();
-			if (menu == null)
-				continue;
-
-			menu.createMenuEntry(1)
-				.setOption("Chat with")
-				.setTarget(target)
-				.setType(MenuAction.RUNELITE_PLAYER)
-				.setIdentifier(0)
-				.onClick(me -> onPrivateMessageRightClick(target));
-			addedToSubMenu = true;
-		}
-
-		if (!addedToSubMenu && !StringUtil.isNullOrEmpty(playerTarget)) {
+		if (!hasExistingChatWith && !StringUtil.isNullOrEmpty(playerTarget)) {
 			String finalTarget = playerTarget;
 			client.getMenu().createMenuEntry(order)
 				.setOption("Chat with")
